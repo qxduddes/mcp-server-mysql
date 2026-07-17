@@ -15,6 +15,9 @@ dependencies = [
     "aiomysql>=0.2",
 ]
 
+[project.scripts]
+mysql-mcp = "mysql_mcp.server:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",

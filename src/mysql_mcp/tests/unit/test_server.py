@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-import server
+from mysql_mcp import server
 
 
 def test_build_http_auth_fails_closed_without_token() -> None:
