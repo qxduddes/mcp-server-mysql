@@ -1,0 +1,38 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      # added fetch-depth: 0 to pull full history/tags
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create Change Log
+        id: changelog
+        uses: TriPSs/conventional-changelog-action@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          release-count: 0
+          skip-commit: 'true'
+          fallback-version: '1.0.0'
+
+      # 2. Modernized using GitHub's built-in CLI (much more reliable than the deprecated v1 action)
+      - name: Create Release
+        if: ${{ steps.changelog.outputs.skipped == 'false' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create ${{ steps.changelog.outputs.tag }} \
+            --title "${{ steps.changelog.outputs.tag }}" \
+            --notes "${{ steps.changelog.outputs.clean_changelog }}"
