@@ -1,0 +1,62 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mysql-mcp"
+version = "0.1.0"
+description = "Security-hardened, read-only MySQL MCP server (Python port of @nilsir/mcp-server-mysql)"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastmcp>=2.0",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "aiomysql>=0.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
+    "ruff>=0.4",
+    "mypy>=1.10",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mysql_mcp"]
+
+[tool.hatch.build]
+exclude = ["src/mysql_mcp/tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["src/mysql_mcp/tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+files = ["src/mysql_mcp", "server.py"]
+exclude = ["src/mysql_mcp/tests"]
+
+[[tool.mypy.overrides]]
+module = "aiomysql.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pymysql.*"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["src/mysql_mcp/tests"]
+pythonpath = ["."]
+markers = [
+    "integration: tests that exercise multiple layers together",
+    "live: tests that hit a real MySQL server — require MYSQL_RUN_LIVE_TESTS=1",
+]
