@@ -177,6 +177,11 @@ def test_read_allowed(sql: str) -> None:
         "SELECT GET_LOCK('a', 10)",
         "SELECT BENCHMARK(1000000, MD5('x'))",
         "SELECT LOAD_FILE('/etc/passwd')",
+        # SEC-002 bypass regression: MySQL treats /**/ as whitespace, so these
+        # must be caught even though the denied tokens are split by a comment.
+        "SELECT 1 INTO/**/OUTFILE '/tmp/x'",
+        "SELECT 1 INTO/* c */DUMPFILE '/tmp/x'",
+        "SELECT 1 -- pre\n INTO OUTFILE '/tmp/x'",
     ],
 )
 def test_forbidden_read_constructs_rejected(sql: str) -> None:

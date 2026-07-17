@@ -16,6 +16,7 @@ Design (see docs/ARCHITECTURE.md and docs/SECURITY.md):
   credentials) so upper layers never touch pymysql types.
 """
 
+import logging
 import ssl
 import time
 from collections.abc import Sequence
@@ -27,6 +28,11 @@ import pymysql
 
 from mysql_mcp.config import ConnectionParams
 from mysql_mcp.errors import MySQLError
+
+logger = logging.getLogger(__name__)
+
+# Hosts for which a plaintext connection is acceptable (audit SEC-010).
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 
 
 @dataclass(frozen=True)
@@ -75,6 +81,14 @@ class MySqlClient:
         return self._max_rows
 
     async def _connect(self) -> Any:
+        # Fail closed on plaintext to a remote host (audit SEC-010): TLS is
+        # only optional for loopback. build_ssl_context never yields a
+        # verification-disabled context, so "TLS on" always means verified.
+        if self._ssl_context is None and self.params.host not in _LOOPBACK_HOSTS:
+            raise MySQLError(
+                f"Refusing plaintext connection to remote host {self.params.host!r}. "
+                "Set MYSQL_SSL=true (certificate verification is always enforced)."
+            )
         try:
             return await aiomysql.connect(
                 host=self.params.host,
@@ -96,33 +110,70 @@ class MySqlClient:
                 f"{exc.__class__.__name__}"
             ) from exc
 
+    async def _apply_statement_timeout(self, conn: Any, cur: Any) -> None:
+        """Bound query runtime, portably across MySQL and MariaDB (SEC-007).
+
+        MySQL 5.7.8+ uses ``MAX_EXECUTION_TIME`` (ms); MariaDB uses
+        ``max_statement_time`` (seconds). We pick by server banner and degrade
+        with a warning if neither is accepted, rather than failing every call.
+        """
+        if self._query_timeout_ms <= 0:
+            return
+        server = ""
+        getter = getattr(conn, "get_server_info", None)
+        if callable(getter):
+            try:
+                info = getter()
+                server = info if isinstance(info, str) else ""
+            except Exception:  # noqa: BLE001 — banner is best-effort only
+                server = ""
+        try:
+            if "mariadb" in server.lower():
+                await cur.execute(
+                    "SET SESSION max_statement_time = %s", (self._query_timeout_ms / 1000.0,)
+                )
+            else:
+                await cur.execute(
+                    "SET SESSION MAX_EXECUTION_TIME = %s", (int(self._query_timeout_ms),)
+                )
+        except pymysql.err.MySQLError:
+            logger.warning(
+                "Server does not support a statement timeout variable; "
+                "continuing without a per-query time bound."
+            )
+
     async def execute(self, sql: str, params: Sequence[Any] | None = None) -> QueryResult:
         """Execute one statement and return capped rows.
 
         ``params`` are bound with pymysql ``%s`` placeholders. When no params
         are supplied, the SQL is executed without interpolation so literal
         ``%`` characters are safe.
+
+        Row capping (SEC-001): at most ``max_rows + 1`` rows are fetched from
+        the server so truncation is detectable without buffering an unbounded
+        result set into memory. ``max_rows == 0`` opts into an explicit
+        unbounded fetch.
         """
         conn = await self._connect()
         try:
             async with conn.cursor() as cur:
-                if self._query_timeout_ms > 0:
-                    await cur.execute(
-                        f"SET SESSION MAX_EXECUTION_TIME = {int(self._query_timeout_ms)}"
-                    )
+                await self._apply_statement_timeout(conn, cur)
                 if params:
                     await cur.execute(sql, tuple(params))
                 else:
                     await cur.execute(sql)
-                fetched = await cur.fetchall()
+                if self._max_rows > 0:
+                    fetched = await cur.fetchmany(self._max_rows + 1)
+                    truncated = len(fetched) > self._max_rows
+                    rows: list[dict[str, Any]] = list(fetched[: self._max_rows])
+                else:
+                    fetched = await cur.fetchall()
+                    truncated = False
+                    rows = list(fetched or [])
         except pymysql.err.MySQLError as exc:
             raise _translate(exc) from exc
         finally:
             conn.close()
-        rows: list[dict[str, Any]] = list(fetched or [])
-        truncated = self._max_rows > 0 and len(rows) > self._max_rows
-        if truncated:
-            rows = rows[: self._max_rows]
         return QueryResult(
             rows=rows,
             row_count=len(rows),

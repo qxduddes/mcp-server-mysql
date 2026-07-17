@@ -27,6 +27,21 @@ def _normalize_sample_limit(limit: int) -> int:
     return min(limit, _SAMPLE_LIMIT_MAX)
 
 
+def _mark_truncation(payload: dict[str, Any], truncated: bool) -> None:
+    """Surface MYSQL_MAX_ROWS truncation on metadata results (SEC-008).
+
+    Schema/metadata queries share the query row cap; when they hit it the view
+    is incomplete, so callers must be told rather than shown partial data as if
+    it were the whole picture.
+    """
+    if truncated:
+        payload["truncated"] = True
+        payload["truncationNote"] = (
+            "Result was capped by MYSQL_MAX_ROWS; this schema view is incomplete. "
+            "Narrow the scope or raise MYSQL_MAX_ROWS on the server."
+        )
+
+
 class SchemaService:
     """Read-only schema navigation through an injected MySqlClient."""
 
@@ -52,10 +67,12 @@ class SchemaService:
         else:
             raise DatabaseRequiredError()
         result = await self._client.execute(sql)
-        return {
+        payload: dict[str, Any] = {
             "tables": [next(iter(row.values())) for row in result.rows],
             "database": database or self._client.params.database or None,
         }
+        _mark_truncation(payload, result.truncated)
+        return payload
 
     async def describe_table(self, table: str, database: str = "") -> dict[str, Any]:
         effective = self._resolve_database(database)
@@ -129,11 +146,18 @@ class SchemaService:
                             "columnName": row["COLUMN_NAME"],
                         }
                     )
-        return {
+        truncated = tables_result.truncated
+        if include_columns:
+            truncated = truncated or columns_result.truncated
+        if include_indexes:
+            truncated = truncated or indexes_result.truncated
+        payload: dict[str, Any] = {
             "database": effective,
             "tableCount": len(tables),
             "tables": list(tables.values()),
         }
+        _mark_truncation(payload, truncated)
+        return payload
 
     async def find_tables(self, term: str, database: str = "") -> dict[str, Any]:
         if not term.strip():
@@ -167,12 +191,14 @@ class SchemaService:
             )
             if row["COLUMN_NAME"] is not None:
                 entry["matchedColumns"].append(row["COLUMN_NAME"])
-        return {
+        payload: dict[str, Any] = {
             "database": effective,
             "term": term.strip(),
             "matchCount": len(matches),
             "matches": list(matches.values()),
         }
+        _mark_truncation(payload, result.truncated)
+        return payload
 
     async def sample_rows(
         self, table: str, database: str = "", limit: int = _SAMPLE_LIMIT_DEFAULT

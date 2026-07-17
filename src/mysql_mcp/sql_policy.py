@@ -67,6 +67,18 @@ FORBIDDEN_READ_RE = re.compile(
     re.IGNORECASE,
 )
 
+# SEC-002: MySQL treats comments as token separators, so `INTO/**/OUTFILE`
+# parses as `INTO OUTFILE` and would slip past a `\s+`-based denylist. Strip
+# comments (for analysis only) before scanning so multi-token constructs can't
+# be split by an interposed comment.
+_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
+_LINE_COMMENT_RE = re.compile(r"(--[^\n]*|#[^\n]*)")
+
+
+def _strip_all_comments(sql: str) -> str:
+    """Replace every comment with a space (analysis-only; never executed)."""
+    return _LINE_COMMENT_RE.sub(" ", _BLOCK_COMMENT_RE.sub(" ", sql))
+
 
 @dataclass(frozen=True)
 class SqlClassification:
@@ -181,7 +193,7 @@ def assert_read_allowed(classification: SqlClassification) -> None:
             f"{classification.operation} operations are not allowed in the query tool. "
             "Use query only for SELECT, SHOW, DESCRIBE, or EXPLAIN statements.",
         )
-    forbidden = FORBIDDEN_READ_RE.search(classification.normalized_sql)
+    forbidden = FORBIDDEN_READ_RE.search(_strip_all_comments(classification.normalized_sql))
     if forbidden:
         raise QueryPolicyError(
             "FORBIDDEN_READ_CONSTRUCT",

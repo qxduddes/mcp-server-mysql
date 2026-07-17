@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Type check (mypy)
+        run: mypy
+
+      - name: Test (pytest)
+        run: pytest
+
+  security-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Keep the installer itself current (its own CVEs are not project deps).
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      # SEC-009: fail the build on known-vulnerable dependencies.
+      - name: Dependency audit (pip-audit)
+        run: pip-audit --strict --desc

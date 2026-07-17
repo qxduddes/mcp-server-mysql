@@ -150,6 +150,36 @@ async def test_sample_rows_binds_limit(schema_service, mock_client) -> None:
     }
 
 
+async def test_inspect_schema_surfaces_truncation(schema_service, mock_client) -> None:
+    # SEC-008: when a metadata query hits MYSQL_MAX_ROWS the schema view is
+    # incomplete and must be flagged, not presented as the whole picture.
+    mock_client.execute.side_effect = [
+        query_result(
+            [{"TABLE_NAME": "t", "TABLE_TYPE": "BASE TABLE", "ENGINE": "InnoDB",
+              "TABLE_ROWS": 0, "TABLE_COMMENT": ""}]
+        ),
+        query_result([], truncated=True),  # columns query capped
+        query_result([]),
+    ]
+    result = await schema_service.inspect_schema("app_db")
+    assert result["truncated"] is True
+    assert "incomplete" in result["truncationNote"].lower()
+
+
+async def test_list_tables_surfaces_truncation(schema_service, mock_client) -> None:
+    mock_client.execute.return_value = query_result(
+        [{"Tables_in_app_db": "t"}], truncated=True
+    )
+    result = await schema_service.list_tables("app_db")
+    assert result["truncated"] is True
+
+
+async def test_inspect_schema_not_truncated_has_no_flag(schema_service, mock_client) -> None:
+    mock_client.execute.return_value = query_result([])
+    result = await schema_service.inspect_schema("app_db")
+    assert "truncated" not in result
+
+
 @pytest.mark.parametrize(("requested", "effective"), [(0, 5), (-3, 5), (50, 50), (999, 50), (1, 1)])
 def test_normalize_sample_limit(requested: int, effective: int) -> None:
     assert _normalize_sample_limit(requested) == effective

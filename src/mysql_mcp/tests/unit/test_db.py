@@ -6,15 +6,23 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pymysql
 import pytest
 
+from mysql_mcp.config import ConnectionParams
 from mysql_mcp.db import MySqlClient, build_ssl_context
 from mysql_mcp.errors import MySQLError
-from mysql_mcp.tests.fixtures.rows import TEST_PARAMS, USERS_ROWS
+from mysql_mcp.tests.fixtures.rows import USERS_ROWS
+
+# db tests actually open (mocked) connections, so use a loopback host — remote
+# hosts without TLS are refused by design (SEC-010, tested separately below).
+LOCAL_PARAMS = ConnectionParams(
+    host="127.0.0.1", port=3306, user="mcp_ro", password="secret-pw", database="app_db"
+)
 
 
 def _mock_connection(rows: list[dict]) -> tuple[MagicMock, AsyncMock]:
     """Build a mock aiomysql connection whose cursor returns the given rows."""
     cursor = AsyncMock()
     cursor.fetchall.return_value = rows
+    cursor.fetchmany.return_value = rows
     cursor_cm = MagicMock()
     cursor_cm.__aenter__ = AsyncMock(return_value=cursor)
     cursor_cm.__aexit__ = AsyncMock(return_value=False)
@@ -22,13 +30,14 @@ def _mock_connection(rows: list[dict]) -> tuple[MagicMock, AsyncMock]:
     conn.cursor.return_value = cursor_cm
     conn.close = MagicMock()
     conn.ping = AsyncMock()
+    conn.get_server_info = MagicMock(return_value="8.4.0")  # MySQL banner by default
     return conn, cursor
 
 
 def _client(**kwargs) -> MySqlClient:
     defaults = {"connect_timeout": 10, "query_timeout_ms": 10_000, "max_rows": 1000}
     defaults.update(kwargs)
-    return MySqlClient(TEST_PARAMS, **defaults)
+    return MySqlClient(LOCAL_PARAMS, **defaults)
 
 
 async def test_execute_returns_rows() -> None:
@@ -54,12 +63,53 @@ async def test_execute_truncates_to_max_rows() -> None:
     assert result.rows == rows[:3]
 
 
+async def test_execute_uses_bounded_fetchmany() -> None:
+    conn, cursor = _mock_connection([])
+    with patch("mysql_mcp.db.aiomysql.connect", AsyncMock(return_value=conn)):
+        await _client(max_rows=100).execute("SELECT * FROM t")
+    # SEC-001: never fetchall() a capped query — fetch at most max_rows + 1
+    cursor.fetchmany.assert_awaited_once_with(101)
+    cursor.fetchall.assert_not_awaited()
+
+
+async def test_execute_unlimited_uses_fetchall() -> None:
+    conn, cursor = _mock_connection([])
+    with patch("mysql_mcp.db.aiomysql.connect", AsyncMock(return_value=conn)):
+        result = await _client(max_rows=0).execute("SELECT * FROM t")
+    cursor.fetchall.assert_awaited_once()
+    assert result.truncated is False
+
+
 async def test_execute_sets_max_execution_time() -> None:
     conn, cursor = _mock_connection([])
     with patch("mysql_mcp.db.aiomysql.connect", AsyncMock(return_value=conn)):
         await _client(query_timeout_ms=5000).execute("SELECT 1")
-    first_sql = cursor.execute.await_args_list[0].args[0]
-    assert first_sql == "SET SESSION MAX_EXECUTION_TIME = 5000"
+    first = cursor.execute.await_args_list[0]
+    assert first.args[0] == "SET SESSION MAX_EXECUTION_TIME = %s"
+    assert first.args[1] == (5000,)
+
+
+async def test_execute_mariadb_uses_max_statement_time() -> None:
+    conn, cursor = _mock_connection([])
+    conn.get_server_info = MagicMock(return_value="10.11.5-MariaDB-1:10.11.5+maria")
+    with patch("mysql_mcp.db.aiomysql.connect", AsyncMock(return_value=conn)):
+        await _client(query_timeout_ms=5000).execute("SELECT 1")
+    first = cursor.execute.await_args_list[0]
+    assert first.args[0] == "SET SESSION max_statement_time = %s"
+    assert first.args[1] == (5.0,)  # milliseconds → seconds for MariaDB
+
+
+async def test_execute_timeout_unsupported_degrades_gracefully() -> None:
+    conn, cursor = _mock_connection([{"x": 1}])
+    # First execute (the SET) fails with an unknown-variable error; the query
+    # itself must still run rather than every call failing (SEC-007).
+    cursor.execute.side_effect = [
+        pymysql.err.OperationalError(1193, "Unknown system variable"),
+        None,
+    ]
+    with patch("mysql_mcp.db.aiomysql.connect", AsyncMock(return_value=conn)):
+        result = await _client(query_timeout_ms=5000).execute("SELECT 1")
+    assert result.row_count == 1
 
 
 async def test_execute_skips_max_execution_time_when_disabled() -> None:
@@ -113,6 +163,27 @@ async def test_ping_returns_latency() -> None:
     assert latency >= 0
     conn.ping.assert_awaited_once()
     conn.close.assert_called_once()
+
+
+async def test_remote_host_without_tls_refused() -> None:
+    client = MySqlClient(
+        ConnectionParams(host="db.remote", port=3306, user="u", password="p", database="d")
+    )
+    with pytest.raises(MySQLError) as exc_info:
+        await client.execute("SELECT 1")
+    assert "plaintext" in str(exc_info.value).lower()
+
+
+async def test_remote_host_with_tls_allowed() -> None:
+    conn, _ = _mock_connection([{"n": 1}])
+    client = MySqlClient(
+        ConnectionParams(host="db.remote", port=3306, user="u", password="p", database="d"),
+        ssl_context=build_ssl_context(True),
+    )
+    with patch("mysql_mcp.db.aiomysql.connect", AsyncMock(return_value=conn)) as connect:
+        result = await client.execute("SELECT 1")
+    assert result.row_count == 1
+    assert connect.call_args.kwargs["ssl"] is not None
 
 
 def test_build_ssl_context_disabled() -> None:
