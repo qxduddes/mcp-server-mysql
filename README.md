@@ -124,6 +124,7 @@ GRANT SELECT, SHOW VIEW ON app_db.* TO 'mcp_ro'@'%';
 
 | Doc | Contents |
 |---|---|
+| [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | **Start here** — step-by-step guide for Claude users, from setup to asking questions |
 | [docs/INSTALLATION.md](docs/INSTALLATION.md) | Setup, configuration, env var reference, verification |
 | [docs/USAGE.md](docs/USAGE.md) | Tool reference, query rules, error codes, audit log |
 | [docs/SECURITY.md](docs/SECURITY.md) | Audit-finding matrix, deployment checklist |
