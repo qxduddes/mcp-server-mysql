@@ -1,4 +1,5 @@
 name: Release
+
 on:
   push:
     branches:
@@ -11,9 +12,11 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v2
+      # added fetch-depth: 0 to pull full history/tags
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Create Change Log
         id: changelog
@@ -24,12 +27,12 @@ jobs:
           skip-commit: 'true'
           fallback-version: '1.0.0'
 
+      # 2. Modernized using GitHub's built-in CLI (much more reliable than the deprecated v1 action)
       - name: Create Release
-        uses: actions/create-release@v1
         if: ${{ steps.changelog.outputs.skipped == 'false' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.changelog.outputs.tag }}
-          release_name: ${{ steps.changelog.outputs.tag }}
-          body: ${{ steps.changelog.outputs.clean_changelog }}
+        run: |
+          gh release create ${{ steps.changelog.outputs.tag }} \
+            --title "${{ steps.changelog.outputs.tag }}" \
+            --notes "${{ steps.changelog.outputs.clean_changelog }}"
