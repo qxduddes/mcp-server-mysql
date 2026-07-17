@@ -54,12 +54,36 @@ The full audit-finding → mitigation matrix and the deployment checklist
 
 ## Quick start
 
+**Run straight from git — npx-style, nothing to clone (needs `uv`: `brew install uv`):**
+
+```json
+{
+  "mcpServers": {
+    "mysql-mcp": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/<org>/mcp-mysql-server@<tag>", "mysql-mcp"],
+      "env": {
+        "MYSQL_HOST": "127.0.0.1",
+        "MYSQL_USER": "mcp_ro",
+        "MYSQL_PASSWORD": "<secret>",
+        "MYSQL_DATABASE": "app_db"
+      }
+    }
+  }
+}
+```
+
+Pin a tag or commit (`@v0.1.0`), not a branch — see the supply-chain note in
+[docs/SECURITY.md](docs/SECURITY.md).
+
+**Local install:**
+
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
 ```
 
-**stdio (Claude Desktop / Claude Code):**
+**stdio (Claude Desktop / Claude Code, cloned repo):**
 
 ```json
 {
