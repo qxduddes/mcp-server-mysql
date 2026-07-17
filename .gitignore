@@ -25,3 +25,7 @@ htmlcov/
 .DS_Store
 .idea/
 .vscode/
+
+# Internal-only content (kept local, not published)
+docs/
+audit/
