@@ -1,7 +1,7 @@
 """Fixtures for live MySQL integration tests.
 
 These tests need a real MySQL server and are skipped unless
-MYSQL_RUN_LIVE_TESTS=1. Recipe for a disposable target (see docs/TESTING.md):
+MYSQL_RUN_LIVE_TESTS=1. Recipe for a disposable target (see docs/setup.md §4):
 
     docker run --rm -d --name mysql-mcp-test -p 3307:3306 \
       -e MYSQL_ROOT_PASSWORD=test -e MYSQL_DATABASE=demo mysql:8.4

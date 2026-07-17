@@ -1,0 +1,39 @@
+# Streamable HTTP deployment of mysql-mcp.
+#
+# Usage:
+#   MCP_AUTH_TOKEN=$(openssl rand -hex 32) docker compose -f examples/docker-compose.yml up -d
+#
+# Credentials are configured server-side via DB_PROFILES; clients select a
+# database per call with db_id and authenticate with the bearer token.
+# Terminate TLS at a reverse proxy in front of this service in production.
+
+services:
+  mysql-mcp:
+    build: ..
+    # Or pin a published image instead of building:
+    # image: ghcr.io/<org>/mysql-mcp:<tag>
+    ports:
+      - "8004:8004"
+    environment:
+      MCP_TRANSPORT: http
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: "8004"
+      # Required — the server refuses to start in HTTP mode without it.
+      MCP_AUTH_TOKEN: "${MCP_AUTH_TOKEN:?set MCP_AUTH_TOKEN}"
+      # One or more named, read-only profiles. Use real secrets from your
+      # secret store; do not commit real credentials.
+      DB_PROFILES: >-
+        {"staging":{"host":"db.internal","port":3306,"user":"mcp_ro",
+        "password":"REPLACE_WITH_SECRET","database":"app_db"}}
+      # Verified TLS to the database (mandatory for remote hosts).
+      MYSQL_SSL: "true"
+      # Optional safety limits (defaults shown).
+      MYSQL_MAX_ROWS: "1000"
+      MYSQL_QUERY_TIMEOUT_MS: "10000"
+      MYSQL_CONNECT_TIMEOUT_S: "10"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8004/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

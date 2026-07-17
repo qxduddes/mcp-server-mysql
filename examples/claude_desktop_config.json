@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "mysql": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/<org>/mcp-mysql-server@<tag>",
+        "mysql-mcp"
+      ],
+      "env": {
+        "MYSQL_HOST": "your-db-host",
+        "MYSQL_PORT": "3306",
+        "MYSQL_USER": "mcp_ro",
+        "MYSQL_PASSWORD": "REPLACE_WITH_SECRET",
+        "MYSQL_DATABASE": "app_db",
+        "MYSQL_SSL": "true"
+      }
+    }
+  }
+}

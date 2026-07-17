@@ -22,7 +22,7 @@ pytest
 # Run unit tests only
 pytest src/mysql_mcp/tests/unit -v
 
-# Run live MySQL tests (requires a real server — see docs/TESTING.md)
+# Run live MySQL tests (requires a real server — see docs/setup.md §4)
 MYSQL_RUN_LIVE_TESTS=1 MYSQL_HOST=127.0.0.1 MYSQL_PORT=3307 \
 MYSQL_USER=root MYSQL_PASSWORD=test MYSQL_DATABASE=demo \
 pytest src/mysql_mcp/tests/integration -m live -v
@@ -50,13 +50,16 @@ EOF
 
 A **read-only** MySQL MCP server: a security-hardened Python port of the
 TypeScript `@nilsir/mcp-server-mysql` v2.0.0. The security audit that drove
-the design is in `audit/` (PDFs); the finding→mitigation matrix is in
-`docs/SECURITY.md`; every divergence from the original is in `docs/CHANGES.md`.
+the design is in `audit/` (PDFs, private); the public security model is in
+`SECURITY.md` and `docs/security/governance.md`; every divergence from the
+original is in `CHANGELOG.md`. Internal working docs (findings, remediation
+plan, conversion plan) live in `docs/internal/` (gitignored).
 
 ## Architecture
 
-Strict 3-layer FastMCP package (see `docs/ARCHITECTURE.md` for the full
-picture):
+Strict 3-layer FastMCP package (transports in `docs/interface/transport.md`,
+governance in `docs/security/governance.md`; invariants restated in
+`CONTRIBUTING.md`):
 
 ```
 tools/          ← Interface layer: the ONLY place FastMCP is imported
@@ -117,7 +120,7 @@ tools or any tool accepting credentials/host parameters.
      `Formatting rules (both modes):` sections
 3. Update `EXPECTED_TOOLS` in
    `src/mysql_mcp/tests/unit/test_tools_registration.py`, add tool tests, and
-   update the tool tables in `README.md` and `docs/USAGE.md`.
+   update the tool tables in `README.md` and `docs/interface/primitives.md`.
 
 ## Testing
 

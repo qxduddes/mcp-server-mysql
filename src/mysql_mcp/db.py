@@ -1,6 +1,6 @@
 """Database I/O boundary — the ONLY module that imports aiomysql.
 
-Design (see docs/ARCHITECTURE.md and docs/SECURITY.md):
+Design (see docs/security/governance.md and SECURITY.md):
 - Per-call short-lived connections: no shared pool, no cross-request state,
   no credential bleed between profiles.
 - CLIENT.MULTI_STATEMENTS stays off: no ``client_flag`` is ever passed, and

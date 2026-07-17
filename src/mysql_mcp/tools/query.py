@@ -1,6 +1,6 @@
 """Query tools — the only tools that accept raw SQL.
 
-Interface-layer rules (see docs/ARCHITECTURE.md):
+Interface-layer rules (see CONTRIBUTING.md → Architecture invariants):
 - Only place FastMCP is imported (together with the other tools/ modules).
 - Primitive parameters only; bind values travel as a JSON-encoded string.
 - Zero business logic: classification and execution live in QueryService.

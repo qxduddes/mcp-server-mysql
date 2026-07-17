@@ -20,7 +20,7 @@ Scanner semantics preserved from the original:
 
 Known faithful limitation: statements starting with ``WITH`` (CTEs) are
 rejected because classification is first-keyword only (documented in
-docs/CHANGES.md as future work).
+CHANGELOG.md as future work).
 """
 
 import re

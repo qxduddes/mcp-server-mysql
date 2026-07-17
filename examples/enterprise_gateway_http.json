@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "mysql": {
+      "type": "http",
+      "url": "https://mysql-mcp.internal.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${MYSQL_MCP_TOKEN}"
+      }
+    }
+  }
+}

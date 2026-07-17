@@ -2,7 +2,7 @@
 
 Python port of @nilsir/mcp-server-mysql v2.0.0 (TypeScript), restricted to the
 read-only tool surface and hardened per the internal security audit (see
-docs/SECURITY.md).
+SECURITY.md).
 
 Public boundary:
 - register_all_tools(mcp) — attach all 9 read-only tools to a FastMCP instance

@@ -17,7 +17,7 @@ EXPECTED_TOOLS = {
 }
 
 # Tools the original TS server exposed that this port deliberately dropped
-# (see docs/CHANGES.md): connect (audit P1-2), use_database (audit LOW), and
+# (see CHANGELOG.md): connect (audit P1-2), use_database (audit LOW), and
 # every write/DDL tool (read-only scope).
 FORBIDDEN_TOOLS = {
     "connect",

@@ -27,5 +27,5 @@ htmlcov/
 .vscode/
 
 # Internal-only content (kept local, not published)
-docs/
 audit/
+docs/internal/
